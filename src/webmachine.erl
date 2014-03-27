@@ -89,13 +89,32 @@ do_rewrite(RewriteMod, Method, Scheme, Version, Headers, RawPath) ->
 
 -include_lib("eunit/include/eunit.hrl").
 
+ensure_all_started(App, Apps0) ->
+    case application:start(App) of
+        ok ->
+            {ok, Apps0};
+        {error,{already_started,App}} ->
+            {ok, Apps0};
+        {error,{not_started,BaseApp}} ->
+            {ok, Apps} = ensure_all_started(BaseApp, Apps0),
+            ensure_all_started(App, [BaseApp|Apps])
+    end.
+
+start_mochiweb() ->
+    case erlang:function_exported(application, ensure_all_started, 1) of
+        true ->
+            {ok, Apps} = application:ensure_all_started(mochiweb),
+            {ok, lists:reverse(Apps)};
+        false ->
+            ensure_all_started(mochiweb,[])
+    end.
+
 start_stop_test() ->
-    application:start(inets),
-    application:start(mochiweb),
+    {Res, Apps} = start_mochiweb(),
+    ?assertEqual(ok, Res),
     ?assertEqual(ok, webmachine:start()),
     ?assertEqual(ok, webmachine:stop()),
-    application:stop(mochiweb),
-    application:stop(inets),
+    [application:stop(App) || App <- Apps],
     ok.
 
 -endif.
